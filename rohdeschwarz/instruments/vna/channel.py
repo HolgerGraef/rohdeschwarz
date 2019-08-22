@@ -570,3 +570,27 @@ class Channel(object):
             return True
         else:
             return False
+
+    def save_frequency_segments(self, filename):
+        port1att = float(self._vna.query(':SOUR:POW1:ATT?').strip())
+        port2att = float(self._vna.query(':SOUR:POW2:ATT?').strip())
+        
+        with open(filename, 'w') as f:
+            f.write('# Frequency based segmented sweep setup of Rohde&Schwarz ZVA\n')
+            f.write('# Attenuator Port 1: {}\n'.format(port1att))
+            f.write('# Attenuator Port 2: {}\n'.format(port2att))
+            f.write('# Seg no.\tfstart\tfstop\tpoints\tbwidth\tpow\n')        
+            count = int(self._vna.query(':SENS{}:SEGM:COUN?'.format(self.index)).strip())
+            for i in range(1,count+1):
+                seg_pow = float(self._vna.query(':SENS{}:SEGM{}:POW?'.format(self.index, i)).strip())
+                bwidth = float(self._vna.query(':SENS{}:SEGM{}:BWID?'.format(self.index, i)).strip())
+                fstart = float(self._vna.query(':SENS{}:SEGM{}:FREQ:STAR?'.format(self.index, i)).strip())
+                fstop = float(self._vna.query(':SENS{}:SEGM{}:FREQ:STOP?'.format(self.index, i)).strip())
+                points = int(self._vna.query(':SENS{}:SEGM{}:SWE:POIN?'.format(self.index, i)).strip())
+                f.write('{:d}\t{:f}\t{:f}\t{:d}\t{:f}\t{:f}\n'.format(i, fstart, fstop, points, bwidth, seg_pow))
+
+    def is_auto_attenuator(self, port):
+        return int(self._vna.query(':SOUR{}:POW{}:ATT:AUTO?'.format(self.index, int(port))).strip())
+
+    def get_attenuator(self, port):
+        return float(self._vna.query(':SOUR{}:POW{}:ATT?'.format(self.index, int(port))).strip())
