@@ -22,6 +22,9 @@ class SweepType(Enum):
             return self.value == other.value
         else:
             return self.value == other
+            
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 class TouchstoneFormat(Enum):
     db_degrees = 'LOGP'
