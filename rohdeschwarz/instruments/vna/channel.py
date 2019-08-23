@@ -307,6 +307,8 @@ class Channel(object):
 
 
     ### Power sweep:
+    #TODO: should raise exceptions if these are called when a different
+    # sweep type is activated
     def _start_power(self):
         scpi = ':SOUR{0}:POW:STAR?'
         scpi = scpi.format(self.index)
