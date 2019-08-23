@@ -570,27 +570,73 @@ class Channel(object):
             return True
         else:
             return False
+        
+    def init_nonblocking_sweep(self, test_ports):
+        self.manual_sweep = True
+        self.s_parameter_group = self.to_logical_ports(test_ports)
+        # cf: https://www.rohde-schwarz.com/webhelp/webhelp_zva/program_examples/basic_tasks/typical_stages_of_a_remote_control_program.htm#Command_Synchronization
+        self._vna.write('*SRE 32')
+        self._vna.write('*ESE 1')
+        
+    def start_nonblocking_sweep(self):
+        self._vna.write("INIT1:IMM; *OPC")
+        
+    def isdone_nonblocking_sweep(self):
+        return int(self._vna.query("*ESR?").strip())
+    
+    def save_nonblocking_sweep(self, localfile, test_ports):
+        unique_filename = unique_alphanumeric_string() + '.s2p'
+                
+        scpi = ":MMEM:STOR:TRAC:PORT {0},'{1}',{2},{3}"
+        scpi = scpi.format(1, \
+                           unique_filename, \
+                           'COMP', \
+                           ','.join(map(str, test_ports)))
+        
+        self._vna.write(scpi)
+        # this saves the file on the ZVA in the folder
+        # C:\Rohde&Schwarz\Nwa\
+        self._vna.pause(5000)
+          
+        self._vna.file.download_file(unique_filename, localfile)
+        self._vna.file.delete(unique_filename)
 
     def save_frequency_segments(self, filename):
         port1att = float(self._vna.query(':SOUR:POW1:ATT?').strip())
         port2att = float(self._vna.query(':SOUR:POW2:ATT?').strip())
+        
+        segments = self.get_frequency_segments()
         
         with open(filename, 'w') as f:
             f.write('# Frequency based segmented sweep setup of Rohde&Schwarz ZVA\n')
             f.write('# Attenuator Port 1: {}\n'.format(port1att))
             f.write('# Attenuator Port 2: {}\n'.format(port2att))
             f.write('# Seg no.\tfstart\tfstop\tpoints\tbwidth\tpow\n')        
-            count = int(self._vna.query(':SENS{}:SEGM:COUN?'.format(self.index)).strip())
-            for i in range(1,count+1):
-                seg_pow = float(self._vna.query(':SENS{}:SEGM{}:POW?'.format(self.index, i)).strip())
-                bwidth = float(self._vna.query(':SENS{}:SEGM{}:BWID?'.format(self.index, i)).strip())
-                fstart = float(self._vna.query(':SENS{}:SEGM{}:FREQ:STAR?'.format(self.index, i)).strip())
-                fstop = float(self._vna.query(':SENS{}:SEGM{}:FREQ:STOP?'.format(self.index, i)).strip())
-                points = int(self._vna.query(':SENS{}:SEGM{}:SWE:POIN?'.format(self.index, i)).strip())
-                f.write('{:d}\t{:f}\t{:f}\t{:d}\t{:f}\t{:f}\n'.format(i, fstart, fstop, points, bwidth, seg_pow))
+                    
+            for s in segments:
+                f.write('{:d}\t{:f}\t{:f}\t{:d}\t{:f}\t{:f}\n'.format(*s))
 
+    def get_frequency_segments(self):
+        if self.sweep_type != 'SEGM':
+            raise Exception('Please use segmented frequency sweep')
+            
+        count = int(self._vna.query(':SENS{}:SEGM:COUN?'.format(self.index)).strip())
+        segments = []
+        for i in range(1,count+1):
+            seg_pow = float(self._vna.query(':SENS{}:SEGM{}:POW?'.format(self.index, i)).strip())
+            bwidth = float(self._vna.query(':SENS{}:SEGM{}:BWID?'.format(self.index, i)).strip())
+            fstart = float(self._vna.query(':SENS{}:SEGM{}:FREQ:STAR?'.format(self.index, i)).strip())
+            fstop = float(self._vna.query(':SENS{}:SEGM{}:FREQ:STOP?'.format(self.index, i)).strip())
+            points = int(self._vna.query(':SENS{}:SEGM{}:SWE:POIN?'.format(self.index, i)).strip())
+            segments.append([i, fstart, fstop, points, bwidth, seg_pow])
+            
+        return segments
+            
     def is_auto_attenuator(self, port):
         return int(self._vna.query(':SOUR{}:POW{}:ATT:AUTO?'.format(self.index, int(port))).strip())
 
     def get_attenuator(self, port):
         return float(self._vna.query(':SOUR{}:POW{}:ATT?'.format(self.index, int(port))).strip())
+    
+    def is_corrected(self):
+        return int(self._vna.query(':SENS{}:CORR?'.format(self.index)).strip())
